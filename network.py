@@ -102,6 +102,7 @@ class Stroke_Embedding_Network(nn.Module):
 
             out = []
             for x, y in zip(x_sketch_h, x_sketch_hidden):
+                print(x.shape, y.shape)
                 out.append(self.layernorm(x + y))
             out, num_stroke_list = pad_sequence(out, batch_first=True), batch['num_stroke_per_negative']
 

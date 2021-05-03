@@ -20,7 +20,7 @@ class Sketch_Classification(nn.Module):
         self.train()
         self.optimizer.zero_grad()
 
-        output_x, num_stroke_x = self.Network(batch, type = 'anchor')
+        output_x, num_stroke_x = self.Network(batch, type='anchor')
         output_y, num_stroke_y = self.Network(batch, type='positive')
         output_neg, num_stroke_neg = self.Network(batch, type='negative')
 

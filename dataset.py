@@ -113,40 +113,40 @@ class Sketchy_Dataset(data.Dataset):
 
 
         if self.hp.data_encoding_type == '3point':
-            stroke_wise_split_anchor = np.split(anchor_sketch_vector,
+            stroke_wise_split_anchor_list = np.split(anchor_sketch_vector,
                                                 np.where(anchor_sketch_vector[:,2])[0] + 1, axis=0)[:-1]
-            stroke_wise_split_positive = np.split(sketch_positive_vector,
+            stroke_wise_split_positive_list = np.split(sketch_positive_vector,
                                                 np.where(sketch_positive_vector[:,2])[0] + 1, axis=0)[:-1]
-            stroke_wise_split_negative = np.split(sketch_negative_vector,
+            stroke_wise_split_negative_list = np.split(sketch_negative_vector,
                                                 np.where(sketch_negative_vector[:,2])[0] + 1, axis=0)[:-1]
 
         elif self.hp.data_encoding_type == '5point':
             anchor_sketch_vector = self.to_delXY(anchor_sketch_vector)
-            stroke_wise_split_anchor = np.split(anchor_sketch_vector, np.where(anchor_sketch_vector[:,3])[0] + 1, axis=0)
+            stroke_wise_split_anchor_list = np.split(anchor_sketch_vector, np.where(anchor_sketch_vector[:,3])[0] + 1, axis=0)
 
             sketch_positive_vector = self.to_delXY(sketch_positive_vector)
-            stroke_wise_split_positive = np.split(sketch_positive_vector, np.where(sketch_positive_vector[:, 3])[0] + 1,
+            stroke_wise_split_positive_list = np.split(sketch_positive_vector, np.where(sketch_positive_vector[:, 3])[0] + 1,
                                                 axis=0)
 
             sketch_negative_vector = self.to_delXY(sketch_negative_vector)
-            stroke_wise_split_negative = np.split(sketch_negative_vector, np.where(sketch_negative_vector[:, 3])[0] + 1,
+            stroke_wise_split_negative_list = np.split(sketch_negative_vector, np.where(sketch_negative_vector[:, 3])[0] + 1,
                                                 axis=0)
 
         else:
             raise ValueError('invalid option for --data_encoding_type. Valid options: 3point/5point')
 
-        stroke_wise_split_anchor = [torch.tensor(x) for x in stroke_wise_split_anchor]
+        stroke_wise_split_anchor = [torch.from_numpy(x) for x in stroke_wise_split_anchor_list]
         every_stroke_len_anchor = [len(stroke) for stroke in stroke_wise_split_anchor]
-        num_stroke_per_anchor= len(every_stroke_len_anchor)
+        num_stroke_per_anchor = len(every_stroke_len_anchor)
         assert sum(every_stroke_len_anchor) == anchor_sketch_vector.shape[0]
 
-        stroke_wise_split_positive = [torch.tensor(x) for x in stroke_wise_split_positive]
+        stroke_wise_split_positive = [torch.from_numpy(x) for x in stroke_wise_split_positive_list]
         every_stroke_len_positive = [len(stroke) for stroke in stroke_wise_split_positive]
         num_stroke_per_positive = len(every_stroke_len_positive)
         assert sum(every_stroke_len_positive) == sketch_positive_vector.shape[0]
 
 
-        stroke_wise_split_negative = [torch.tensor(x) for x in stroke_wise_split_negative]
+        stroke_wise_split_negative = [torch.from_numpy(x) for x in stroke_wise_split_negative_list]
         every_stroke_len_negative = [len(stroke) for stroke in stroke_wise_split_negative]
         num_stroke_per_negative = len(every_stroke_len_negative)
         assert sum(every_stroke_len_negative) == sketch_negative_vector.shape[0]
@@ -249,6 +249,10 @@ def collate_self(batch):
     batch_mod['sketch_negative_vector'] = pad_sequence(batch_mod['sketch_negative_vector'], batch_first=True)
     batch_mod['every_stroke_len_negative'] = torch.tensor(batch_mod['every_stroke_len_negative'])
     batch_mod['stroke_wise_split_negative'] = pad_sequence(batch_mod['stroke_wise_split_negative'], batch_first=True)
+
+    # batch['stroke_wsie_split'] --> [329, 347, 3] --> [no.of stroke, max no.of points in the longest strokes of the
+    #                                                   batch, 3]
+    # batch['anchor_sketch_vector'] = [16, 2277, 3] --> [batchsize, max no.of points a sketch contains in the batch, 3]
 
     return batch_mod
 
