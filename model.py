@@ -24,7 +24,7 @@ class Sketch_Classification(nn.Module):
         self.loss = loss
         self.hp = hp
         self.neighbour = NeighbourhoodConsensus2D(
-            pool=hp.pool, k_size=hp.k_size)
+            use_conv=hp.use_conv, pool=hp.pool, k_size=hp.k_size)
 
     def train_model(self, batch):
         self.train()
@@ -37,6 +37,8 @@ class Sketch_Classification(nn.Module):
         output_y, num_stroke_y = self.Network(batch, type='positive')
         output_neg, num_stroke_neg = self.Network(batch, type='negative')
 
+        # from IPython import embed
+        # embed()
         mask_x, mask_y, mask_neg = map(
             make_mask, [num_stroke_x, num_stroke_y, num_stroke_neg])
 

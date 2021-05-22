@@ -34,6 +34,8 @@ if __name__ == "__main__":
     parser.add_argument('--eval_freq_iter', type=int, default=1000)
     parser.add_argument('--print_freq_iter', type=int, default=10)
     parser.add_argument('--splitTrain', type=int, default=0.7)
+    parser.add_argument('--use_conv', type=bool, default=False,
+                        help="Whether to use Conv consensus")
     parser.add_argument('--training', type=str,
                         default='sketch', help='sketch / rgb / edge')
 
@@ -48,20 +50,21 @@ if __name__ == "__main__":
     step = 0
     best_accuracy = 0
 
-    for epoch in range(hp.max_epoch):
+    with torch.autograd.detect_anomaly():
+        for epoch in range(hp.max_epoch):
 
-        for i_batch, batch in enumerate(dataloader_Train):
-            loss = model.train_model(batch)
-            step += 1
+            for i_batch, batch in enumerate(dataloader_Train):
+                loss = model.train_model(batch)
+                step += 1
 
-            if (step + 0) % hp.print_freq_iter == 0:
-                print('Epoch: {}, Iter: {}, Steps: {}, Loss: {}, Best Accuracy: {}'.format(epoch, i_batch, step, loss,
-                                                                                           best_accuracy))
+                if (step + 0) % hp.print_freq_iter == 0:
+                    print('Epoch: {}, Iter: {}, Steps: {}, Loss: {}, Best Accuracy: {}'.format(epoch, i_batch, step, loss,
+                                                                                               best_accuracy))
 
-            if (step + 1) % hp.eval_freq_iter == 0:
-                with torch.no_grad():
-                    accuracy = model.evaluate(dataloader_Test)
-                if accuracy > best_accuracy:
-                    best_accuracy = accuracy
-                    torch.save(model.state_dict(), 'model_best_' +
-                               str(hp.training) + '.pth')
+                if (step + 1) % hp.eval_freq_iter == 0:
+                    with torch.no_grad():
+                        accuracy = model.evaluate(dataloader_Test)
+                    if accuracy > best_accuracy:
+                        best_accuracy = accuracy
+                        torch.save(model.state_dict(), 'model_best_' +
+                                   str(hp.training) + '.pth')

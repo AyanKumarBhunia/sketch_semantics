@@ -8,14 +8,23 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def loss(corr_xy, corr_xneg):
     # Positive match
-    score_A, _ = corr_xy.softmax(dim=-1).max(-1)
-    score_B, _ = corr_xy.permute(0, 2, 1).softmax(dim=-1).max(-1)
-    pos_score = torch.mean(score_A + score_B) / 2
+
+    corr_B = corr_xy  # .permute(0, 2, 1)
+    corr_A = corr_xy.permute(0, 2, 1)
+
+    # (b, s1, s2).max(2) -> (b, s1, 1)
+    score_A, _ = corr_A.softmax(dim=-1).max(-1)
+    # (b, s2, s1).max(2) -> (b, s2, 1)
+    score_B, _ = corr_B.softmax(dim=-1).max(-1)
+    pos_score = (score_A.mean() + score_B.mean()) / 2
 
     # Negative match
-    score_A, _ = corr_xneg.softmax(dim=-1).max(-1)
-    score_B, _ = corr_xneg.permute(0, 2, 1).softmax(dim=-1).max(-1)
-    neg_score = torch.mean(score_A + score_B) / 2
+    corr_B = corr_xneg  # .permute(0, 2, 1)
+    corr_A = corr_xneg.permute(0, 2, 1)
+
+    score_A, _ = corr_A.softmax(dim=-1).max(-1)
+    score_B, _ = corr_B.softmax(dim=-1).max(-1)
+    neg_score = (score_A.mean() + score_B.mean()) / 2
 
     return neg_score - pos_score
 
@@ -67,7 +76,7 @@ def maxpool(corr, k_size=4):
 
 
 class NeighbourhoodConsensus2D(nn.Module):
-    def __init__(self, pool=False, k_size=None, use_cuda=True, kernel_sizes=[3, 3, 3], channels=[10, 10, 1], symmetric_mode=True):
+    def __init__(self, use_conv=True, pool=False, k_size=None, use_cuda=True, kernel_sizes=[3, 3, 3], channels=[10, 10, 1], symmetric_mode=True):
         super(NeighbourhoodConsensus2D, self).__init__()
         self.symmetric_mode = symmetric_mode
         self.kernel_sizes = kernel_sizes
@@ -75,6 +84,7 @@ class NeighbourhoodConsensus2D(nn.Module):
         self.pool = pool
         self.k_size = k_size
         self.corr = FeatureCorrelation()
+        self.use_conv = use_conv
 
         num_layers = len(kernel_sizes)
         nn_modules = list()
@@ -93,21 +103,38 @@ class NeighbourhoodConsensus2D(nn.Module):
             self.conv.cuda()
 
     def forward(self, feature_A, feature_B, mask_A, mask_B):
+        # feature_A -> b, s1, d
+        # feature_B -> b, s2, d
+
         x = self.corr(feature_A, feature_B, mask_A, mask_B)
-        x = x.unsqueeze(1)
-        if self.symmetric_mode:
-            # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
-            # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
-            x = self.conv(x)+self.conv(x.permute(0, 1, 3, 2)
-                                       ).permute(0, 1, 3, 2)
-            # because of the ReLU layers in between linear layers,
-            # this operation is different than convolving a single time with the filters+filters^T
-            # and therefore it makes sense to do this.
-        else:
-            x = self.conv(x)
-        if self.pool:
-            x = maxpool(x, k_size=self.k_size)
-        return x.squeeze(1)
+        # x -> b, s1, s2
+
+        if False:
+            x = x.unsqueeze(1)
+            if self.symmetric_mode:
+                # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
+                # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
+                x = self.conv(x) + self.conv(x.permute(0, 1, 3, 2)
+                                             ).permute(0, 1, 3, 2)
+                # because of the ReLU layers in between linear layers,
+                # this operation is different than convolving a single time with the filters+filters^T
+                # and therefore it makes sense to do this.
+            else:
+                x = self.conv(x)
+            if self.pool:
+                x = maxpool(x, k_size=self.k_size)
+            return x.squeeze(1)
+        # else:
+        #     x = x + x.t()  # Modify Eq. 2 to work with (b, s1, s2) & (b, s1, s2)
+
+        # print(x[0, 2, 3], x[0, 3, 2])
+        # print(x[0, 1, 3], x[0, 3, 1])
+        # print(x[0, 0, 3], x[0, 3, 0])
+
+        r_A = x / x.max(-1, keepdim=True)[0]
+        r_B = x / x.max(1, keepdim=True)[0]
+        x = x * r_A * r_B
+        return x
 
 
 class Stroke_Embedding_Network(nn.Module):
