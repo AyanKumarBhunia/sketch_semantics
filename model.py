@@ -37,13 +37,12 @@ class Sketch_Classification(nn.Module):
         output_y, num_stroke_y = self.Network(batch, type='positive')
         output_neg, num_stroke_neg = self.Network(batch, type='negative')
 
-        # from IPython import embed
-        # embed()
         mask_x, mask_y, mask_neg = map(
             make_mask, [num_stroke_x, num_stroke_y, num_stroke_neg])
 
         corr_xy = self.neighbour(output_x, output_y, mask_x, mask_y)
-        corr_xneg = self.neighbour(output_x, output_neg, mask_x, mask_neg)
+        corr_xneg = self.neighbour(
+            output_x, output_neg, mask_x, mask_neg)
 
         loss = self.loss(corr_xy, corr_xneg)
         loss.backward()
