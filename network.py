@@ -1,3 +1,4 @@
+import pdb
 import torch.nn as nn
 import torchvision.models as backbone_
 import torch
@@ -33,8 +34,7 @@ def loss(corr_xy, corr_xneg):
 
 def featureL2Norm(feature):
     epsilon = 1e-6
-    norm = torch.pow(torch.sum(torch.pow(feature, 2), 1) +
-                     epsilon, 0.5).unsqueeze(1)  # .expand_as(feature)
+    norm = torch.pow(torch.sum(torch.pow(feature, 2), 1) + epsilon, 0.5).unsqueeze(1)  # .expand_as(feature)
     return torch.div(feature, norm)
 
 
@@ -56,6 +56,7 @@ class FeatureCorrelation(torch.nn.Module):
         # perform matrix mult.
 
         # (b, s1, d) @ (b, d, s2) -> (b, s1, s2)
+        # pdb.set_trace()
         correlation_tensor = torch.bmm(feature_A, feature_B)
         mask = max_neg_value(torch.bmm(mask_A, mask_B.transpose(1, 2)))
 
@@ -98,8 +99,7 @@ class NeighbourhoodConsensus2D(nn.Module):
                 ch_in = channels[i-1]
             ch_out = channels[i]
             k_size = kernel_sizes[i]
-            nn_modules.append(nn.Conv2d(
-                in_channels=ch_in, out_channels=ch_out, kernel_size=k_size, bias=True, padding=1))
+            nn_modules.append(nn.Conv2d(in_channels=ch_in, out_channels=ch_out, kernel_size=k_size, bias=True, padding=1))
             nn_modules.append(nn.ReLU(inplace=True))
         self.conv = nn.Sequential(*nn_modules)
         if use_cuda:
@@ -112,13 +112,12 @@ class NeighbourhoodConsensus2D(nn.Module):
         x, mask = self.corr(feature_A, feature_B, mask_A, mask_B)
         # x -> b, s1, s2
 
-        if False:
+        if False:     ## ??
             x = x.unsqueeze(1)
             if self.symmetric_mode:
                 # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
                 # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
-                x = self.conv(x) + self.conv(x.permute(0, 1, 3, 2)
-                                             ).permute(0, 1, 3, 2)
+                x = self.conv(x) + self.conv(x.permute(0, 1, 3, 2)).permute(0, 1, 3, 2)
                 # because of the ReLU layers in between linear layers,
                 # this operation is different than convolving a single time with the filters+filters^T
                 # and therefore it makes sense to do this.
@@ -127,8 +126,11 @@ class NeighbourhoodConsensus2D(nn.Module):
             if self.pool:
                 x = maxpool(x, k_size=self.k_size)
             return x.squeeze(1)
+
         # else:
         #     x = x + x.t()  # Modify Eq. 2 to work with (b, s1, s2) & (b, s1, s2)
+
+        # problem lies here
 
         # assert(torch.isfinite(x).all())
         # r_A = x / x.max(-1, keepdim=True)[0]
@@ -157,8 +159,7 @@ class Stroke_Embedding_Network(nn.Module):
                                    dropout=hp.dropout_stroke,
                                    batch_first=True, bidirectional=True)
 
-        self.embedding_1 = nn.Linear(
-            hp.hidden_size*2*hp.stroke_LSTM_num_layers, hp.hidden_size)
+        self.embedding_1 = nn.Linear(hp.hidden_size*2*hp.stroke_LSTM_num_layers, hp.hidden_size)
 
         self.LSTM_global = nn.LSTM(hp.hidden_size, hp.hidden_size, num_layers=hp.stroke_LSTM_num_layers,
                                    dropout=hp.dropout_stroke,
@@ -166,6 +167,8 @@ class Stroke_Embedding_Network(nn.Module):
 
         self.embedding_2 = nn.Linear(2*hp.hidden_size, hp.hidden_size)
         self.layernorm = nn.LayerNorm(hp.hidden_size)
+
+        self.classifier = nn.Linear(hp.hidden_size, 125)
 
     def forward(self, batch, type='anchor'):
 
@@ -180,20 +183,19 @@ class Stroke_Embedding_Network(nn.Module):
 
             x_sketch = x_stroke.split(batch['num_stroke_per_anchor'])
             x_sketch_h = x_sketch
+            # pdb.set_trace()
             x_sketch = pad_sequence(x_sketch, batch_first=True)
 
             x_sketch = pack_padded_sequence(x_sketch, torch.tensor(batch['num_stroke_per_anchor']),
                                             batch_first=True, enforce_sorted=False)
             _, (x_sketch_hidden, _) = self.LSTM_global(x_sketch.float())
-            x_sketch_hidden = x_sketch_hidden.permute(
-                1, 0, 2).reshape(x_sketch_hidden.shape[1], -1)
-            x_sketch_hidden = self.embedding_2(x_sketch_hidden)
+            x_sketch_hidden = x_sketch_hidden.permute(1, 0, 2).reshape(x_sketch_hidden.shape[1], -1)
+            x_sketch_hidden = self.embedding_2(x_sketch_hidden)    # b x 512
 
             out = []
             for x, y in zip(x_sketch_h, x_sketch_hidden):
                 out.append(self.layernorm(x + y))
-            out, num_stroke_list = pad_sequence(
-                out, batch_first=True), batch['num_stroke_per_anchor']
+            out, num_stroke_list = pad_sequence(out, batch_first=True), batch['num_stroke_per_anchor']
 
         elif type == 'positive':
 
@@ -237,15 +239,13 @@ class Stroke_Embedding_Network(nn.Module):
             x_sketch = pack_padded_sequence(x_sketch, torch.tensor(batch['num_stroke_per_negative']),
                                             batch_first=True, enforce_sorted=False)
             _, (x_sketch_hidden, _) = self.LSTM_global(x_sketch.float())
-            x_sketch_hidden = x_sketch_hidden.permute(
-                1, 0, 2).reshape(x_sketch_hidden.shape[1], -1)
+            x_sketch_hidden = x_sketch_hidden.permute(1, 0, 2).reshape(x_sketch_hidden.shape[1], -1)
             x_sketch_hidden = self.embedding_2(x_sketch_hidden)
 
             out = []
             for x, y in zip(x_sketch_h, x_sketch_hidden):
                 out.append(self.layernorm(x + y))
-            out, num_stroke_list = pad_sequence(
-                out, batch_first=True), batch['num_stroke_per_negative']
+            out, num_stroke_list = pad_sequence(out, batch_first=True), batch['num_stroke_per_negative']
 
         return out, num_stroke_list
 
