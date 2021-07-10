@@ -1,11 +1,10 @@
-import numpy as np
 import argparse
 import torch
-import time
 from model import Sketch_Classification
 from dataset import get_dataloader
 from stroke_visualiser import show
 from pinakinathc_py import SendEmail
+
 client = SendEmail()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -24,12 +23,12 @@ if __name__ == "__main__":
     parser.add_argument('--pool', type=bool, default=False, help='Use Max pooling in Neighbourhood Consensus')
     parser.add_argument('--k_size', type=bool, default=4, help='Kernel Size for Neighbourhood Consensus Network')
     parser.add_argument('--data_encoding_type', type=str, default='3point', help='3point vs 5point')
-    parser.add_argument('--batchsize', type=int, default=4)
+    parser.add_argument('--batchsize', type=int, default=16)
     parser.add_argument('--nThreads', type=int, default=4)
     parser.add_argument('--learning_rate', type=float, default=0.0001)
     parser.add_argument('--max_epoch', type=int, default=200)
-    parser.add_argument('--eval_freq_iter', type=int, default=100)   # 500
-    parser.add_argument('--print_freq_iter', type=int, default=10)
+    parser.add_argument('--eval_freq_iter', type=int, default=500)   # 500
+    parser.add_argument('--print_freq_iter', type=int, default=5)
     parser.add_argument('--splitTrain', type=int, default=0.7)
     parser.add_argument('--use_conv', type=bool, default=False, help="Whether to use Conv consensus")
     parser.add_argument('--training', type=str, default='sketch', help='sketch / rgb / edge')
@@ -43,31 +42,28 @@ if __name__ == "__main__":
         model = Sketch_Classification(hp)
         model.to(device)
         step = 0
-        best_accuracy = 0
+        best_test_loss = 100
 
-        # with torch.no_grad():
-        #     accuracy = model.evaluate(dataloader_Test)
-
-        # with torch.autograd.detect_anomaly():
         for epoch in range(hp.max_epoch):
-
             for i_batch, batch in enumerate(dataloader_Train):
-                loss_ncn, loss_ce = model.train_model(batch)
+                loss_ncn = model.train_model(batch)
                 step += 1
 
                 if (step + 0) % hp.print_freq_iter == 0:
-                    print(f'Epoch: {epoch :0>5} \tIter: {i_batch :0>5} \tSteps: {step :0>5} '
-                          f'\tAccuracy: {best_accuracy :.5f} \tLoss_NCN: {loss_ncn :.5f} \tLoss_CE: {loss_ce :.5f}')
+                    print(f'Epoch: {epoch:0>5} \tIter: {i_batch:0>5} \tSteps: {step:0>5} \tLoss_NCN: {loss_ncn:.5f}')
 
                 if (step + 1) % hp.eval_freq_iter == 0:
                     show(step, batch, model)
                     with torch.no_grad():
-                        accuracy = model.evaluate(dataloader_Test)
-                    if accuracy > best_accuracy:
-                        best_accuracy = accuracy
+                        test_loss = model.evaluate(dataloader_Test)
+                    if test_loss < best_test_loss:
+                        best_test_loss = test_loss
                         torch.save(model.state_dict(), 'model_best_' + str(hp.training) + '.pth')
 
+        print ('Finished Training')
+
     except Exception as e:
-        message = '\n'.join([expt_name, 'Error : ', str(e)])
+        message = '\n'.join([expt_name, 'Exception : ', str(e)])
         print(message)
-        # client.send('saneeshan95@gmail.com', message)
+        if hp.disable_tqdm:
+            client.send('saneeshan95@gmail.com', message)
