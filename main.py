@@ -42,7 +42,10 @@ if __name__ == "__main__":
         model = Sketch_Classification(hp)
         model.to(device)
         step = 0
-        best_test_loss = 100
+        best_test_loss = 10
+
+        with torch.no_grad():
+            best_test_loss = model.evaluate(dataloader_Test)
 
         for epoch in range(hp.max_epoch):
             for i_batch, batch in enumerate(dataloader_Train):
@@ -50,7 +53,7 @@ if __name__ == "__main__":
                 step += 1
 
                 if (step + 0) % hp.print_freq_iter == 0:
-                    print(f'Epoch: {epoch:0>5} \tIter: {i_batch:0>5} \tSteps: {step:0>5} \tLoss_NCN: {loss_ncn:.5f}')
+                    print(f'Epoch: {epoch:0>3} \tIter: {i_batch:0>5} \tSteps: {step:0>5} \tLoss_NCN: {loss_ncn:.5f}')
 
                 if (step + 1) % hp.eval_freq_iter == 0:
                     show(step, batch, model)
@@ -67,3 +70,4 @@ if __name__ == "__main__":
     #     print(message)
     #     if hp.disable_tqdm:
     #         client.send('saneeshan95@gmail.com', message)
+    #         client.send('2ajay.das@gmail.com', message)

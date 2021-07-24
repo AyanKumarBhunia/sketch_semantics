@@ -23,7 +23,7 @@ class Sketch_Classification(nn.Module):
         self.Network = Stroke_Embedding_Network(hp)
         self.train_params = self.parameters()
         self.optimizer = optim.Adam(self.train_params, hp.learning_rate)
-        self.score = corr_score_us
+        self.score = corr_score
         self.hp = hp
         self.neighbour = NeighbourhoodConsensus2D(use_conv=hp.use_conv, pool=hp.pool, k_size=hp.k_size)
 
@@ -41,22 +41,35 @@ class Sketch_Classification(nn.Module):
         neg_score = self.score(corr_xneg, num_stroke_anc, num_stroke_neg)
 
         loss_ncn = neg_score - pos_score
-        return loss_ncn
+        return loss_ncn, corr_xpos
 
     def train_model(self, batch):
         self.train()
         self.optimizer.zero_grad()
-        loss = self.calc_loss(batch) # neg_score - pos_score
+        loss, _ = self.calc_loss(batch) # neg_score - pos_score
         loss.backward()
         self.optimizer.step()
         return loss.item()
 
-    def evaluate(self, dataloader_Test):
+    def evaluate_old(self, dataloader_Test):
         self.eval()
         test_loss = 0
         start_time = time.time()
         for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
             test_loss += self.calc_loss(batch).item()
+
+        test_loss /= len(dataloader_Test.dataset)
+        print(f'\nTest set: Average loss: {test_loss:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
+
+        return test_loss
+
+    def evaluate(self, dataloader_Test):    #  in Progress
+        self.eval()
+        test_loss = 0
+        start_time = time.time()
+        for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
+            score_pos, corr_pos = self.calc_loss(batch)
+            test_loss += score_pos.item()      # this needs to change to hard match
 
         test_loss /= len(dataloader_Test.dataset)
         print(f'\nTest set: Average loss: {test_loss:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')

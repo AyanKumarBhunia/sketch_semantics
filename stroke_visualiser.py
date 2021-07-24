@@ -4,26 +4,28 @@ import numpy as np
 from datetime import datetime
 from PIL import Image, ImageDraw
 from rasterize import rasterize_Sketch
+from model import make_mask
 
-time_id = datetime.now().strftime("%b%d_%H:%M:%S")
+time_id = datetime.now().strftime("%b%d_%H-%M-%S")
 
 
 def show(step, batch, model):
     if not os.path.isdir(time_id):
         os.makedirs(time_id)
+
     output_anc, num_stroke_anc = model.Network(batch, type='anchor')  # b,N1,512
     output_pos, num_stroke_pos = model.Network(batch, type='positive') # b,N2,512
+    mask_anc, mask_pos = map(make_mask, [num_stroke_anc, num_stroke_pos])
+    corr_xpos = model.neighbour(output_anc, output_pos, mask_anc, mask_pos)
 
     im = Image.new('RGB', (266*output_anc.shape[0], 5+261*2))     # width x height
     '''
     I need the n1 x n2 matrix
     For every element in N1, the top 2 values in N2 for which the N1xN2 matrix value is highest, will be coloured
     '''
-    for i_sample, sample_anc in enumerate(output_anc):
-        sample_pos = output_pos[i_sample]  # N2x512
-        A = torch.matmul(sample_anc, sample_pos.t())  # N1 x N2
-        maxA = A.max()
-        a,b = torch.where(A == maxA)
+    for i_sample, A in enumerate(corr_xpos):
+        a, b = torch.where(A == A.max())
+        a, b = a[0].item(), b[0].item()       # in the rare case there are multiple same max values
 
         k = batch['anchor_sketch_vector']
         anchor = Image.fromarray(255-rasterize_Sketch(k[i_sample].numpy())).convert('RGB')
@@ -39,7 +41,7 @@ def show(step, batch, model):
         start_index = sum(batch['num_stroke_per_positive'][:i_sample])
         beta_pos = batch['stroke_wise_split_positive'][start_index: start_index + nOFstroke].numpy()
 
-        a, b = a.item() % beta_anc.shape[0], b.item() % beta_pos.shape[0]    # not accurate - avoid errors
+        a, b = a % beta_anc.shape[0], b % beta_pos.shape[0]    # not accurate - avoid errors
 
         beta_stroke_points_anc = np.where(255 - rasterize_Sketch(beta_anc[a]) == 0)
         for i_point in range(len(beta_stroke_points_anc[0])):
