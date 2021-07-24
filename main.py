@@ -23,7 +23,7 @@ if __name__ == "__main__":
     parser.add_argument('--pool', type=bool, default=False, help='Use Max pooling in Neighbourhood Consensus')
     parser.add_argument('--k_size', type=bool, default=4, help='Kernel Size for Neighbourhood Consensus Network')
     parser.add_argument('--data_encoding_type', type=str, default='3point', help='3point vs 5point')
-    parser.add_argument('--batchsize', type=int, default=16)
+    parser.add_argument('--batchsize', type=int, default=8)
     parser.add_argument('--nThreads', type=int, default=4)
     parser.add_argument('--learning_rate', type=float, default=0.0001)
     parser.add_argument('--max_epoch', type=int, default=200)

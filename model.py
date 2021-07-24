@@ -23,7 +23,7 @@ class Sketch_Classification(nn.Module):
         self.Network = Stroke_Embedding_Network(hp)
         self.train_params = self.parameters()
         self.optimizer = optim.Adam(self.train_params, hp.learning_rate)
-        self.score = corr_score
+        self.score = corr_score_us
         self.hp = hp
         self.neighbour = NeighbourhoodConsensus2D(use_conv=hp.use_conv, pool=hp.pool, k_size=hp.k_size)
 
@@ -37,8 +37,8 @@ class Sketch_Classification(nn.Module):
         corr_xpos = self.neighbour(output_anc, output_pos, mask_anc, mask_pos)
         corr_xneg = self.neighbour(output_anc, output_neg, mask_anc, mask_neg)
 
-        pos_score = self.score(corr_xpos)
-        neg_score = self.score(corr_xneg)
+        pos_score = self.score(corr_xpos, num_stroke_anc, num_stroke_pos)
+        neg_score = self.score(corr_xneg, num_stroke_anc, num_stroke_neg)
 
         loss_ncn = neg_score - pos_score
         return loss_ncn

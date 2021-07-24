@@ -3,23 +3,56 @@ import torch
 # import pdb
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+import torch.nn.functional as F
 
 def max_neg_value(tensor):
     return -torch.finfo(tensor.dtype).max
+
+def corr_score_us(corr_xy, len_A, len_B):
+    corr_B = corr_xy  # .permute(0, 2, 1)
+    corr_A = corr_xy.permute(0, 2, 1)
+
+    # score_A, _ = corr_A.softmax(dim=-1).max(-1)   # (b, N1, N2).max(2) -> (b, N1, 1)
+    # score_B, _ = corr_B.softmax(dim=-1).max(-1)   # (b, N2, N1).max(2) -> (b, N2, 1)
+
+    score_A_mean = 0
+    for x, y, z in zip(corr_B, len_A, len_B):
+        score_A_ab = x[:y, :z]
+        print(torch.isinf(score_A_ab).sum())
+        score_A_mean += F.softmax(score_A_ab, dim=-1).max(-1)[0].mean()
+
+    score_B_mean = 0
+    for x, y, z in zip(corr_A, len_B, len_A):
+        score_B_ab = x[:y, :z]
+        print(torch.isinf(score_B_ab).sum())
+        score_B_mean += F.softmax(score_B_ab, dim=-1).max(-1)[0].mean()
+
+    score = (score_A_mean + score_B_mean) / 2
+    print(score)
+
+    # corr_B: batch, N1_max, N2_max
+    return score
 
 
 def corr_score(corr_xy):
     corr_B = corr_xy  # .permute(0, 2, 1)
     corr_A = corr_xy.permute(0, 2, 1)
 
+    corr_A.softmax(dim=-1)
+
     score_A, _ = corr_A.softmax(dim=-1).max(-1)   # (b, N1, N2).max(2) -> (b, N1, 1)
     score_B, _ = corr_B.softmax(dim=-1).max(-1)   # (b, N2, N1).max(2) -> (b, N2, 1)
 
 
     print(torch.nansum(score_A), torch.nansum(score_B))
-    score_A_mean = torch.nansum(score_A)/ (1 - torch.isnan(score_A).float()).sum()
-    score_B_mean = torch.nansum(score_B) / (1 - torch.isnan(score_B).float()).sum()
+    # score_A_mean = torch.nansum(score_A)/ (1 - torch.isnan(score_A).float()).sum()
+    # score_B_mean = torch.nansum(score_B) / (1 - torch.isnan(score_B).float()).sum()
+
+
+    score_A_mean = (torch.where(torch.isnan(score_A), torch.tensor(0.0).to(device), score_A)).sum() / (1 - torch.isnan(score_A).float()).sum()
+    score_B_mean = (torch.where(torch.isnan(score_B), torch.tensor(0.0).to(device), score_B)).sum() / (1 - torch.isnan(score_B).float()).sum()
+
+    # https://discuss.pytorch.org/t/torch-nansum-yields-nan-gradients-unexpectedly/117115/3
 
     print(score_A_mean, score_B_mean)
     score = (score_A_mean + score_B_mean) / 2
@@ -158,6 +191,8 @@ class NeighbourhoodConsensus2D(nn.Module):
         mask = torch.zeros_like(corr_tensor)
         mask[corr_tensor == 0] = -float('inf')
         corr_tensor_masked = corr_tensor + mask
+
+        # mask_index = [torch.where(m==0)[0] for m in mask]
 
         #  masking strategy 1: -float('inf') followed by softmax
         #  masking strategy 1: float('nan') followed by torch.nansum()
