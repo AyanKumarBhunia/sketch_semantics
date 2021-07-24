@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('--training', type=str, default='sketch', help='sketch / rgb / edge')
     parser.add_argument('--disable_tqdm', action='store_true')
 
-    try:
+    if True:
         hp = parser.parse_args()
         dataloader_Train, dataloader_Test = get_dataloader(hp)
         print(hp)
@@ -62,8 +62,8 @@ if __name__ == "__main__":
 
         print ('Finished Training')
 
-    except Exception as e:
-        message = '\n'.join([expt_name, 'Exception : ', str(e)])
-        print(message)
-        if hp.disable_tqdm:
-            client.send('saneeshan95@gmail.com', message)
+    # except Exception as e:
+    #     message = '\n'.join([expt_name, 'Exception : ', str(e)])
+    #     print(message)
+    #     if hp.disable_tqdm:
+    #         client.send('saneeshan95@gmail.com', message)

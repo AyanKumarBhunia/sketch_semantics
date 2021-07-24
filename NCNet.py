@@ -16,10 +16,15 @@ def corr_score(corr_xy):
     score_A, _ = corr_A.softmax(dim=-1).max(-1)   # (b, N1, N2).max(2) -> (b, N1, 1)
     score_B, _ = corr_B.softmax(dim=-1).max(-1)   # (b, N2, N1).max(2) -> (b, N2, 1)
 
+
+    print(torch.nansum(score_A), torch.nansum(score_B))
     score_A_mean = torch.nansum(score_A)/ (1 - torch.isnan(score_A).float()).sum()
     score_B_mean = torch.nansum(score_B) / (1 - torch.isnan(score_B).float()).sum()
+
+    print(score_A_mean, score_B_mean)
     score = (score_A_mean + score_B_mean) / 2
 
+    print(score)
     return score
 
 
@@ -115,9 +120,9 @@ class NeighbourhoodConsensus2D(nn.Module):
         self.corr = FeatureCorrelation()
         self.use_conv = use_conv
 
-        self.masked_conv = NC_Conv2D_Masked()
-        if use_cuda:
-            self.masked_conv.cuda()
+        # self.masked_conv = NC_Conv2D_Masked()
+        # if use_cuda:
+        #     self.masked_conv.cuda()
 
     def forward(self, feature_A, feature_B, mask_A, mask_B):
         # feature_A -> b, N1, d
@@ -132,15 +137,15 @@ class NeighbourhoodConsensus2D(nn.Module):
 
         corr_tensor = corr_tensor.unsqueeze(1)
 
-        if self.symmetric_mode:                                                 # equation 2
-            # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
-            # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
-            corr_tensor = self.masked_conv(corr_tensor) + self.masked_conv(corr_tensor.permute(0, 1, 3, 2)).permute(0, 1, 3, 2)
-            # because of the ReLU layers in between linear layers,
-            # this operation is different than convolution of a single time with the filters+filters^T
-            # and therefore it makes sense to do this.
-        else:
-            corr_tensor = self.masked_conv(corr_tensor)
+        # if self.symmetric_mode:                                                 # equation 2
+        #     # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
+        #     # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
+        #     corr_tensor = self.masked_conv(corr_tensor) + self.masked_conv(corr_tensor.permute(0, 1, 3, 2)).permute(0, 1, 3, 2)
+        #     # because of the ReLU layers in between linear layers,
+        #     # this operation is different than convolution of a single time with the filters+filters^T
+        #     # and therefore it makes sense to do this.
+        # else:
+        #     corr_tensor = self.masked_conv(corr_tensor)
 
 
         corr_tensor = corr_tensor.squeeze(1)
