@@ -26,7 +26,7 @@ class Sketchy_Dataset(data.Dataset):
         self.hp = hp
         self.mode = mode
         self.training = copy.deepcopy(hp.training)
-        with open('/vol/research/sketchCV/datasets/Sketchy/sketchy_all.pickle', 'rb') as fp:
+        with open('sketchy_all.pickle', 'rb') as fp:
             train_sketch, test_sketch, self.negativeSampleDict, self.Coordinate = pickle.load(fp)
 
         set_A = [x for x in train_sketch if x.split('/')[0] not in unseen_classes]

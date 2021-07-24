@@ -3,9 +3,9 @@ import torch
 from model import Sketch_Classification
 from dataset import get_dataloader
 from stroke_visualiser import show
-from pinakinathc_py import SendEmail
+# from pinakinathc_py import SendEmail
 
-client = SendEmail()
+# client = SendEmail()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":

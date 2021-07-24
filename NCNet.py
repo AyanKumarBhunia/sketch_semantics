@@ -15,7 +15,10 @@ def corr_score(corr_xy):
 
     score_A, _ = corr_A.softmax(dim=-1).max(-1)   # (b, N1, N2).max(2) -> (b, N1, 1)
     score_B, _ = corr_B.softmax(dim=-1).max(-1)   # (b, N2, N1).max(2) -> (b, N2, 1)
-    score = (score_A.mean() + score_B.mean()) / 2
+
+    score_A_mean = torch.nansum(score_A)/ (1 - torch.isnan(score_A).float()).sum()
+    score_B_mean = torch.nansum(score_B) / (1 - torch.isnan(score_B).float()).sum()
+    score = (score_A_mean + score_B_mean) / 2
 
     return score
 
@@ -47,36 +50,20 @@ class FeatureCorrelation(torch.nn.Module):
         # perform matrix mult.
         # (b, N1, d) @ (b, d, N2) -> (b, N1, N2)
         correlation_tensor = torch.bmm(feature_A, feature_B)           # equation 1
-        mask = max_neg_value(torch.bmm(mask_A, mask_B.transpose(1, 2)))
+        # mask = max_neg_value(torch.bmm(mask_A, mask_B.transpose(1, 2)))
 
         if self.normalization:
             correlation_tensor = featureL2Norm(torch.nn.functional.relu(correlation_tensor))
 
-        return correlation_tensor, mask
-
-
-def maxpool(corr, k_size=4):
-    slices = []
-    for i in range(k_size):
-        for j in range(k_size):
-            slices.append(corr[:, 0, i::k_size, j::k_size].unsqueeze(0))
-    slices = torch.cat(slices, dim=1)
-    corr, max_idx = torch.max(slices, dim=1, keepdim=True)
-    max_j = torch.fmod(max_idx, k_size)
-    max_i = max_idx.sub(max_j).div(k_size)
-    # i,j represent the *relative* coords of the max point in the box of size k_size*k_size
-    return (corr, max_i, max_j)
+        return correlation_tensor
 
 
 def MutualMatching(corr2d):  #b, N1, N2 is input ..
     # mutual matching
-    # batch_size, ch, fs1, fs2, fs3, fs4 = corr4d.size()   # OLD 4D
-    # b, N1, N2 =  corr2d.size() in this case
+    # enforced reciprocity. given i-th row -- if argmin is j <===> given j-th col -- argmin is i
+    # argmin of axis 2 w.rt. axis 1 should be equal to argmin of axis 1 w.r.t axis 2
 
-    # corr4d_B = corr4d.view(batch_size, fs1 * fs2, fs3, fs4)  # [batch_idx,k_A,i_B,j_B]   # OLD 4D
-    # corr4d_A = corr4d.view(batch_size, fs1, fs2, fs3 * fs4)
 
-    # nothing to modify. Just get the max in each axis.
 
     # get max
     corr2d_N1_max, _ = torch.max(corr2d, dim=1, keepdim=True)    # along N1 axis
@@ -93,10 +80,32 @@ def MutualMatching(corr2d):  #b, N1, N2 is input ..
 
     return corr2d
 
+class NC_Conv2D_Masked(nn.Module):
+    def __init__(self, ch_hidden=10, k_size=3):
+        super(NC_Conv2D_Masked, self).__init__()
+
+        self.conv1 = nn.Conv2d(1, out_channels=ch_hidden, kernel_size=k_size,
+                                bias=True, padding=1)
+        self.conv2 = nn.Conv2d(ch_hidden, out_channels=ch_hidden, kernel_size=k_size,
+                                bias=True, padding=1)
+        self.conv3 = nn.Conv2d(ch_hidden, out_channels=1, kernel_size=k_size,
+                                bias=True, padding=1)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        mask_cal = torch.ones_like(x)
+        mask_cal[x == 0] = 0. # batch, 1, N1, N2
+
+        x = self.relu(self.conv1(x)) * mask_cal # batch, 10, N1, N2
+        x = self.relu(self.conv2(x)) * mask_cal
+        x = self.relu(self.conv3(x)) * mask_cal
+
+        return x
+
 
 class NeighbourhoodConsensus2D(nn.Module):
     def __init__(self, use_conv=True, pool=False, k_size=None, use_cuda=True,
-                 kernel_sizes=[3, 3, 3], channels=[10, 10, 1], symmetric_mode=True):
+                 kernel_sizes=[3, 3, 3], channels=[10, 10, 1], symmetric_mode=False):
         super(NeighbourhoodConsensus2D, self).__init__()
         self.symmetric_mode = symmetric_mode
         self.kernel_sizes = kernel_sizes
@@ -106,28 +115,15 @@ class NeighbourhoodConsensus2D(nn.Module):
         self.corr = FeatureCorrelation()
         self.use_conv = use_conv
 
-        num_layers = len(kernel_sizes)
-        nn_modules = list()
-        self.corr.eval()
-        for i in range(num_layers):
-            if i == 0:
-                ch_in = 1
-            else:
-                ch_in = channels[i-1]
-            ch_out = channels[i]
-            k_size = kernel_sizes[i]
-            nn_modules.append(nn.Conv2d(in_channels=ch_in, out_channels=ch_out, kernel_size=k_size,
-                                        bias=True, padding=1))
-            nn_modules.append(nn.ReLU(inplace=True))
-        self.conv = nn.Sequential(*nn_modules)
+        self.masked_conv = NC_Conv2D_Masked()
         if use_cuda:
-            self.conv.cuda()
+            self.masked_conv.cuda()
 
     def forward(self, feature_A, feature_B, mask_A, mask_B):
         # feature_A -> b, N1, d
         # feature_B -> b, N2, d
 
-        corr_tensor, mask = self.corr(feature_A, feature_B, mask_A, mask_B)      # equation 1  -- done
+        corr_tensor = self.corr(feature_A, feature_B, mask_A, mask_B)      # equation 1  -- done
         # corr_tensor -> b, N1, N2
         # mask basically takes care of the negative infinity part.
         assert (torch.isfinite(corr_tensor).all())
@@ -135,36 +131,32 @@ class NeighbourhoodConsensus2D(nn.Module):
         corr_tensor = MutualMatching(corr_tensor)                               # equation 4+5
 
         corr_tensor = corr_tensor.unsqueeze(1)
+
         if self.symmetric_mode:                                                 # equation 2
             # apply network on the input and its "transpose" (swapping A-B to B-A ordering of the correlation tensor),
             # this second result is "transposed back" to the A-B ordering to match the first result and be able to add together
-            corr_tensor = self.conv(corr_tensor) + self.conv(corr_tensor.permute(0, 1, 3, 2)).permute(0, 1, 3, 2)
+            corr_tensor = self.masked_conv(corr_tensor) + self.masked_conv(corr_tensor.permute(0, 1, 3, 2)).permute(0, 1, 3, 2)
             # because of the ReLU layers in between linear layers,
             # this operation is different than convolution of a single time with the filters+filters^T
             # and therefore it makes sense to do this.
         else:
-            corr_tensor = self.conv(corr_tensor)
-        if self.pool:
-            corr_tensor = maxpool(corr_tensor, k_size=self.k_size)
+            corr_tensor = self.masked_conv(corr_tensor)
+
 
         corr_tensor = corr_tensor.squeeze(1)
 
         corr_tensor = MutualMatching(corr_tensor)
-        
-        # problem lies here
 
-        # assert(torch.isfinite(x).all())
-        # r_A = x / x.max(-1, keepdim=True)[0]
-        # assert(torch.isfinite(r_A).all()) # This assert fails, commented since Loss becomes NaN
-        # r_B = x / x.max(1, keepdim=True)[0]
-        # assert(torch.isfinite(r_B).all())
-        # x = x * r_A * r_B
+        # https://medium.com/analytics-vidhya/masking-in-transformers-self-attention-mechanism-bad3c9ec235c
+        # MASKING to deal with softmax -- summation over softmax output = 1.
 
-        # corr4d = MutualMatching(corr4d)
-        # corr4d = self.NeighConsensus(corr4d)
-        # corr4d = MutualMatching(corr4d)
+        mask = torch.zeros_like(corr_tensor)
+        mask[corr_tensor == 0] = -float('inf')
+        corr_tensor_masked = corr_tensor + mask
 
-        corr_tensor = corr_tensor * mask
-        return corr_tensor
+        #  masking strategy 1: -float('inf') followed by softmax
+        #  masking strategy 1: float('nan') followed by torch.nansum()
+
+        return corr_tensor_masked
 
 
