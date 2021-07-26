@@ -43,8 +43,8 @@ if __name__ == "__main__":
         model.to(device)
         step, best_accuracy = 0, 0
 
-        # with torch.no_grad():
-        #     best_accuracy = model.evaluate(dataloader_Test)
+        with torch.no_grad():
+            best_accuracy = model.evaluate(dataloader_Test)
 
         for epoch in range(hp.max_epoch):
             for i_batch, batch in enumerate(dataloader_Train):

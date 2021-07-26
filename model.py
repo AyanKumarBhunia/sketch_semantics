@@ -27,7 +27,10 @@ class Sketch_Classification(nn.Module):
         self.hp = hp
         self.neighbour = NeighbourhoodConsensus2D(use_conv=hp.use_conv, pool=hp.pool, k_size=hp.k_size)
 
-    def calc_loss(self, batch):
+    def train_model(self, batch):
+        self.train()
+        self.optimizer.zero_grad()
+
         output_anc, num_stroke_anc = self.Network(batch, type='anchor')
         output_pos, num_stroke_pos = self.Network(batch, type='positive')
         output_neg, num_stroke_neg = self.Network(batch, type='negative')
@@ -40,47 +43,35 @@ class Sketch_Classification(nn.Module):
         pos_score = self.score(corr_xpos, num_stroke_anc, num_stroke_pos)
         neg_score = self.score(corr_xneg, num_stroke_anc, num_stroke_neg)
 
-        loss_ncn = neg_score - pos_score
-        return loss_ncn, corr_xpos
-
-    def train_model(self, batch):
-        self.train()
-        self.optimizer.zero_grad()
-        loss, _ = self.calc_loss(batch)  # neg_score - pos_score
+        loss = neg_score - pos_score
         loss.backward()
         self.optimizer.step()
         return loss.item()
-
-    def evaluate_old(self, dataloader_Test):
-        self.eval()
-        test_loss = 0
-        start_time = time.time()
-        for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
-            test_loss, _ = self.calc_loss(batch)
-
-        test_loss /= len(dataloader_Test.dataset)
-        print(f'\nTest set: Average loss: {test_loss:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
-
-        return test_loss
 
     def evaluate(self, dataloader_Test):    # in Progress
         self.eval()
         accuracy = 0
         start_time = time.time()
         for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
-            _, corr_pos = self.calc_loss(batch)
 
-            anc_max = torch.argmax(corr_pos, dim=2)  # argmax of N2 w.r.t to N1  -- index tensor  b x N1
-            pos_max = torch.argmax(corr_pos, dim=1)  # argmax of N1 w.r.t to N2  -- index tensor  b x N2
+            output_anc, num_stroke_anc = self.Network(batch, type='anchor')
+            output_pos, num_stroke_pos = self.Network(batch, type='positive')
+            mask_anc, mask_pos = map(make_mask, [num_stroke_anc, num_stroke_pos])
+            corr_xpos = self.neighbour(output_anc, output_pos, mask_anc, mask_pos)
+            corr_mask = torch.bmm(mask_anc, mask_pos.permute(0, 2, 1)) / 512.0
+
+            anc_max = torch.argmax(corr_xpos, dim=2)  # argmax of N2 w.r.t to N1  -- index tensor  b x N1
+            pos_max = torch.argmax(corr_xpos, dim=1)  # argmax of N1 w.r.t to N2  -- index tensor  b x N2
 
             # anchor to positive matching
             anc_index = torch.arange(anc_max.shape[1], device=device).unsqueeze(0).repeat(anc_max.shape[0], 1)  # b x N1
-            acc_anc2pos = (anc_index == torch.gather(pos_max, 1, anc_max)).float().mean()  # averages across tensor
+            acc_anc2pos = (anc_index == torch.gather(pos_max, 1, anc_max)).sum()
 
             # positive to anchor matching
             pos_index = torch.arange(pos_max.shape[1], device=device).unsqueeze(0).repeat(pos_max.shape[0], 1)  # b x N2
-            acc_pos2anc = (pos_index == torch.gather(anc_max, 1, pos_max)).float().mean()  # averages across tensor
+            acc_pos2anc = (pos_index == torch.gather(anc_max, 1, pos_max)).sum()
 
+            # average across tensor is wrong because the entire tensor is not involved for the correlations
             accuracy += (acc_anc2pos + acc_pos2anc)/2
 
         accuracy /= len(dataloader_Test.dataset)      # taking mean across batch
