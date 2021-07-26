@@ -41,11 +41,10 @@ if __name__ == "__main__":
 
         model = Sketch_Classification(hp)
         model.to(device)
-        step = 0
-        best_test_loss = 10
+        step, best_accuracy = 0, 0
 
         with torch.no_grad():
-            best_test_loss = model.evaluate(dataloader_Test)
+            best_accuracy = model.evaluate(dataloader_Test)
 
         for epoch in range(hp.max_epoch):
             for i_batch, batch in enumerate(dataloader_Train):
@@ -53,14 +52,15 @@ if __name__ == "__main__":
                 step += 1
 
                 if (step + 0) % hp.print_freq_iter == 0:
-                    print(f'Epoch: {epoch:0>3} \tIter: {i_batch:0>5} \tSteps: {step:0>5} \tLoss_NCN: {loss_ncn:.5f}')
+                    print(f'Epoch: {epoch:0>3} | Iter: {i_batch:0>5} | Steps: {step:0>5} | '
+                          f'Best_accuracy: {best_accuracy:.5f} | Loss_NCN: {loss_ncn:.5f}')
 
                 if (step + 1) % hp.eval_freq_iter == 0:
                     show(step, batch, model)
                     with torch.no_grad():
-                        test_loss = model.evaluate(dataloader_Test)
-                    if test_loss < best_test_loss:
-                        best_test_loss = test_loss
+                        accuracy = model.evaluate(dataloader_Test)
+                    if accuracy > best_accuracy:
+                        best_accuracy = accuracy
                         torch.save(model.state_dict(), 'model_best_' + str(hp.training) + '.pth')
 
         print ('Finished Training')

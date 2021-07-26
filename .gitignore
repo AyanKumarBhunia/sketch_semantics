@@ -1,1 +1,5 @@
 /sketchy_all.pickle
+*.png
+/.vscode
+.idea/
+*.pth

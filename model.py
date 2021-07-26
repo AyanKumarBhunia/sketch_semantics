@@ -46,7 +46,7 @@ class Sketch_Classification(nn.Module):
     def train_model(self, batch):
         self.train()
         self.optimizer.zero_grad()
-        loss, _ = self.calc_loss(batch) # neg_score - pos_score
+        loss, _ = self.calc_loss(batch)  # neg_score - pos_score
         loss.backward()
         self.optimizer.step()
         return loss.item()
@@ -56,22 +56,48 @@ class Sketch_Classification(nn.Module):
         test_loss = 0
         start_time = time.time()
         for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
-            test_loss += self.calc_loss(batch).item()
+            test_loss, _ = self.calc_loss(batch)
 
         test_loss /= len(dataloader_Test.dataset)
         print(f'\nTest set: Average loss: {test_loss:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
 
         return test_loss
 
-    def evaluate(self, dataloader_Test):    #  in Progress
+    def evaluate(self, dataloader_Test):    # in Progress
         self.eval()
-        test_loss = 0
+        accuracy = 0
         start_time = time.time()
         for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
-            score_pos, corr_pos = self.calc_loss(batch)
-            test_loss += score_pos.item()      # this needs to change to hard match
+            _, corr_pos = self.calc_loss(batch)
+            # anc to positive matching
+            anc_max = torch.argmax(corr_pos, dim=2)  # argmax of N2 w.r.t to N1  -- index tensor  b x N1
+            pos_max = torch.argmax(corr_pos, dim=1)  # argmax of N1 w.r.t to N2  -- index tensor  b x N2
 
-        test_loss /= len(dataloader_Test.dataset)
-        print(f'\nTest set: Average loss: {test_loss:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
+            anc_index = torch.arange(anc_max.shape[1], device=device).unsqueeze(0).repeat(anc_max.shape[0], 1)  # b x N1
+            accuracy += (anc_index == torch.gather(pos_max, 1, anc_max)).sum()
 
-        return test_loss
+
+            # for i_sample, sample in enumerate(anc_max):
+            #     for i_val, val in enumerate(sample):
+            #         result.append(float(pos_max[i_sample, val] == i_val))
+            accuracy /= len(dataloader_Test.dataset)
+            print(f'\nTest set: Average loss: {accuracy*100:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
+
+        # rank = torch.zeros(len(Sketch_Name))
+        # Image_Feature_ALL = torch.stack(Image_Feature_ALL)
+        #
+        # for num, sketch_feature in enumerate(Sketch_Feature_ALL):
+        #     s_name = Sketch_Name[num]
+        #     sketch_query_name = '_'.join(s_name.split('/')[-1].split('_')[:-1])
+        #     position_query = Image_Name.index(sketch_query_name)
+        #
+        #     distance = F.pairwise_distance(sketch_feature.unsqueeze(0), Image_Feature_ALL)
+        #     target_distance = F.pairwise_distance(sketch_feature.unsqueeze(0),
+        #                                           Image_Feature_ALL[position_query].unsqueeze(0))
+        #
+        #     rank[num] = distance.le(target_distance).sum()
+        #
+        # top1 = rank.le(1).sum().numpy() / rank.shape[0]
+        # top10 = rank.le(10).sum().numpy() / rank.shape[0]
+
+        return accuracy
