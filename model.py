@@ -69,35 +69,21 @@ class Sketch_Classification(nn.Module):
         start_time = time.time()
         for i_batch, batch in enumerate(tqdm(dataloader_Test, desc='Testing', disable=self.hp.disable_tqdm)):
             _, corr_pos = self.calc_loss(batch)
-            # anc to positive matching
+
             anc_max = torch.argmax(corr_pos, dim=2)  # argmax of N2 w.r.t to N1  -- index tensor  b x N1
             pos_max = torch.argmax(corr_pos, dim=1)  # argmax of N1 w.r.t to N2  -- index tensor  b x N2
 
+            # anchor to positive matching
             anc_index = torch.arange(anc_max.shape[1], device=device).unsqueeze(0).repeat(anc_max.shape[0], 1)  # b x N1
-            accuracy += (anc_index == torch.gather(pos_max, 1, anc_max)).sum()
+            acc_anc2pos = (anc_index == torch.gather(pos_max, 1, anc_max)).float().mean()  # averages across tensor
 
+            # positive to anchor matching
+            pos_index = torch.arange(pos_max.shape[1], device=device).unsqueeze(0).repeat(pos_max.shape[0], 1)  # b x N2
+            acc_pos2anc = (pos_index == torch.gather(anc_max, 1, pos_max)).float().mean()  # averages across tensor
 
-            # for i_sample, sample in enumerate(anc_max):
-            #     for i_val, val in enumerate(sample):
-            #         result.append(float(pos_max[i_sample, val] == i_val))
-            accuracy /= len(dataloader_Test.dataset)
-            print(f'\nTest set: Average loss: {accuracy*100:.5f}, Time_Takes: {(time.time() - start_time):.5f}\n')
+            accuracy += (acc_anc2pos + acc_pos2anc)/2
 
-        # rank = torch.zeros(len(Sketch_Name))
-        # Image_Feature_ALL = torch.stack(Image_Feature_ALL)
-        #
-        # for num, sketch_feature in enumerate(Sketch_Feature_ALL):
-        #     s_name = Sketch_Name[num]
-        #     sketch_query_name = '_'.join(s_name.split('/')[-1].split('_')[:-1])
-        #     position_query = Image_Name.index(sketch_query_name)
-        #
-        #     distance = F.pairwise_distance(sketch_feature.unsqueeze(0), Image_Feature_ALL)
-        #     target_distance = F.pairwise_distance(sketch_feature.unsqueeze(0),
-        #                                           Image_Feature_ALL[position_query].unsqueeze(0))
-        #
-        #     rank[num] = distance.le(target_distance).sum()
-        #
-        # top1 = rank.le(1).sum().numpy() / rank.shape[0]
-        # top10 = rank.le(10).sum().numpy() / rank.shape[0]
+        accuracy /= len(dataloader_Test.dataset)      # taking mean across batch
+        print(f'\nTest set: Average loss: {accuracy*100:.5f}, Time_Taken: {(time.time() - start_time):.5f}\n')
 
         return accuracy

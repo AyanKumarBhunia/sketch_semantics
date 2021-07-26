@@ -13,46 +13,47 @@ def show(step, batch, model):
     if not os.path.isdir(time_id):
         os.makedirs(time_id)
 
-    output_anc, num_stroke_anc = model.Network(batch, type='anchor')  # b,N1,512
-    output_pos, num_stroke_pos = model.Network(batch, type='positive') # b,N2,512
+    output_anc, num_stroke_anc = model.Network(batch, type='anchor')    # b,N1,512
+    output_pos, num_stroke_pos = model.Network(batch, type='positive')  # b,N2,512
     mask_anc, mask_pos = map(make_mask, [num_stroke_anc, num_stroke_pos])
     corr_xpos = model.neighbour(output_anc, output_pos, mask_anc, mask_pos)
 
-    im = Image.new('RGB', (266*output_anc.shape[0], 5+261*2))     # width x height
     '''
     I need the n1 x n2 matrix
-    For every element in N1, the top 2 values in N2 for which the N1xN2 matrix value is highest, will be coloured
+    For every stroke in N1, the stroke having highest correlation will be painted.
     '''
-    for i_sample, A in enumerate(corr_xpos):
-        a, b = torch.where(A == A.max())
-        a, b = a[0].item(), b[0].item()       # in the rare case there are multiple same max values
+    i_sample = 0                      # range = 0 to batch-size
+    A = corr_xpos[i_sample]           # Taking 1 sample out of the batch
+    anc_max = torch.argmax(A, dim=1)  # 1 x N1
 
-        k = batch['anchor_sketch_vector']
-        anchor = Image.fromarray(255-rasterize_Sketch(k[i_sample].numpy())).convert('RGB')
-        draw_anc = ImageDraw.Draw(anchor)
-        nOFstroke = batch['num_stroke_per_anchor'][i_sample]
-        start_index = sum(batch['num_stroke_per_anchor'][:i_sample])
-        beta_anc = batch['stroke_wise_split_anchor'][start_index: start_index+nOFstroke].numpy()
+    anc_vec = batch['anchor_sketch_vector']
+    anc_img_orig = Image.fromarray(255 - rasterize_Sketch(anc_vec[i_sample].numpy())).convert('RGB')
+    anc_stroke_num = batch['num_stroke_per_anchor'][i_sample]
+    start_index = sum(batch['num_stroke_per_anchor'][:i_sample])
+    anc_sample = batch['stroke_wise_split_anchor'][start_index: start_index + anc_stroke_num].numpy()
 
-        k = batch['sketch_positive_vector']
-        positive = Image.fromarray(255 - rasterize_Sketch(k[i_sample].numpy())).convert('RGB')
-        draw_pos = ImageDraw.Draw(positive)
-        nOFstroke = batch['num_stroke_per_positive'][i_sample]
-        start_index = sum(batch['num_stroke_per_positive'][:i_sample])
-        beta_pos = batch['stroke_wise_split_positive'][start_index: start_index + nOFstroke].numpy()
+    pos_vec = batch['sketch_positive_vector']
+    pos_img_orig = Image.fromarray(255 - rasterize_Sketch(pos_vec[i_sample].numpy())).convert('RGB')
+    pos_stroke_num = batch['num_stroke_per_positive'][i_sample]
+    start_index = sum(batch['num_stroke_per_positive'][:i_sample])
+    pos_sample = batch['stroke_wise_split_positive'][start_index: start_index + pos_stroke_num].numpy()
 
-        a, b = a % beta_anc.shape[0], b % beta_pos.shape[0]    # not accurate - avoid errors
+    im = Image.new('RGB', (266 * anc_stroke_num, 5 + 261 * 2))  # width x height
+    for i_stroke in range(anc_stroke_num):
+        anc_img = anc_img_orig.copy()
+        draw_anc = ImageDraw.Draw(anc_img)
+        anc_stroke_points = np.where(255 - rasterize_Sketch(anc_sample[i_stroke]) == 0)
+        for i_point in range(len(anc_stroke_points[0])):
+            draw_anc.point((anc_stroke_points[1][i_point],anc_stroke_points[0][i_point]), fill='red')
 
-        beta_stroke_points_anc = np.where(255 - rasterize_Sketch(beta_anc[a]) == 0)
-        for i_point in range(len(beta_stroke_points_anc[0])):
-            draw_anc.point((beta_stroke_points_anc[1][i_point],beta_stroke_points_anc[0][i_point]), fill='red')
+        pos_img = pos_img_orig.copy()
+        draw_pos = ImageDraw.Draw(pos_img)
+        pos_stroke_points = np.where(255 - rasterize_Sketch(pos_sample[anc_max[i_stroke].item()]) == 0)
+        for i_point in range(len(pos_stroke_points[0])):
+            draw_pos.point((pos_stroke_points[1][i_point], pos_stroke_points[0][i_point]), fill='blue')
 
-        beta_stroke_points_pos = np.where(255 - rasterize_Sketch(beta_pos[b]) == 0)
-        for i_point in range(len(beta_stroke_points_pos[0])):
-            draw_pos.point((beta_stroke_points_pos[1][i_point], beta_stroke_points_pos[0][i_point]), fill='blue')
-
-        im.paste(anchor, (5+i_sample*266, 5))      #width x height
-        im.paste(positive, (5+i_sample*266, 266))
+        im.paste(anc_img, (5+i_stroke*266, 5))      #width x height
+        im.paste(pos_img, (5+i_stroke*266, 266))
 
     im.save(f'{time_id}/Step_{step}.png')
 
