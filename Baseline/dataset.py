@@ -14,9 +14,7 @@ import numpy as np
 import random
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-unseen_classes = ['bat', 'cabin', 'cow', 'dolphin', 'door', 'giraffe', 'helicopter', 'mouse', 'pear', 'raccoon',
-                  'rhinoceros', 'saw', 'scissors', 'seagull', 'skyscraper', 'songbird', 'sword', 'tree',
-                  'wheelchair', 'windmill', 'window']
+unseen_classes = ['bat', 'cabin', 'cow', 'dolphin', 'door', 'giraffe', 'helicopter', 'mouse', 'pear', 'raccoon', 'rhinoceros', 'saw', 'scissors', 'seagull', 'skyscraper', 'songbird', 'sword', 'tree', 'wheelchair', 'windmill', 'window']
 # /vol/research/sketchCV/datasets/Sketchy/
 
 
@@ -26,7 +24,7 @@ class Sketchy_Dataset(data.Dataset):
         self.hp = hp
         self.mode = mode
         self.training = copy.deepcopy(hp.training)
-        with open('/vol/research/sketchCV/datasets/Sketchy/sketchy_all.pickle', 'rb') as fp:
+        with open(hp.base_dir + '/../../../datasets/Sketchy/sketchy_all.pickle', 'rb') as fp:
             train_sketch, test_sketch, self.negativeSampleDict, self.Coordinate = pickle.load(fp)
 
         set_A = [x for x in train_sketch if x.split('/')[0] not in unseen_classes]
@@ -189,7 +187,7 @@ class Sketchy_Dataset(data.Dataset):
 
 
 def pad_sequence(sequences, batch_first=False, padding_value=0.0):
-    # type: (List[Tensor], bool, float) -> Tensor
+    # (list[tensor], bool, float) -> tensor
 
     # assuming trailing dimensions and type of all the Tensors
     # in sequences are same and fetching those from sequences[0]

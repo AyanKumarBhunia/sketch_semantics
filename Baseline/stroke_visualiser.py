@@ -9,9 +9,9 @@ from model import make_mask
 time_id = datetime.now().strftime("%b%d_%H-%M-%S")
 
 
-def show(step, batch, model):
-    if not os.path.isdir(time_id):
-        os.makedirs(time_id)
+def show(step, batch, model, save_path):
+    if not os.path.isdir(save_path + '/' + time_id):
+        os.makedirs(save_path + '/' + time_id)
 
     output_anc, num_stroke_anc = model.Network(batch, type='anchor')    # b,N1,512
     output_pos, num_stroke_pos = model.Network(batch, type='positive')  # b,N2,512
@@ -55,6 +55,6 @@ def show(step, batch, model):
         im.paste(anc_img, (5+i_stroke*266, 5))      #width x height
         im.paste(pos_img, (5+i_stroke*266, 266))
 
-    im.save(f'{time_id}/Step_{step}.png')
+    im.save(f'{save_path}/{time_id}/Step_{step}.png')
 
     return

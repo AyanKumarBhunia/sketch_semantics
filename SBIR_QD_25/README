@@ -1,0 +1,21 @@
+Dataset directories:
+1. Sketchy:
+
+>Sketchy
+	>extended_photo_v2
+		>train
+		>test
+	>sketchy_all.pickle
+
+2.TUBerlin:
+
+>TU_Berlin_v2
+	>train
+	>test
+	>TU_Berlin.pickle
+	
+
+
+#new dataloader
+python main.py --dataset_name=Sketchy --base_dir=.././Sketchy --max_epoch=200 --batchsize=16 --print_freq_iter=100 --nThreads=4 --eval_freq_iter=2000
+python main.py --dataset_name=TUBerlin --base_dir=.././TU_Berlin_v2 --max_epoch=200 --batchsize=16 --print_freq_iter=100 --nThreads=4 --eval_freq_iter=2000

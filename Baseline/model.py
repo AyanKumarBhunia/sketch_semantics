@@ -46,7 +46,7 @@ class Sketch_Classification(nn.Module):
         loss = neg_score - pos_score
         loss.backward()
         self.optimizer.step()
-        return loss.item()
+        return loss.item()  
 
     def evaluate(self, dataloader_Test):    # in Progress
         self.eval()

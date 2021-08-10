@@ -1,4 +1,14 @@
 import torch
+import smtplib
+
+
+def send_email(sender_email, message, bot_email='pinakinathc.bot1@gmail.com', bot_pwd='pinakinathc1995'):
+    smtpObj = smtplib.SMTP('smtp.gmail.com', 587) # Connect to google's smtp server
+    smtpObj.ehlo()
+    smtpObj.starttls()
+    smtpObj.login(bot_email, bot_pwd)
+    smtpObj.sendmail(bot_email, sender_email, f'Subject: Update from pinakinathc.bot-1\n\n{message}')
+
 def collate_self(batch):
     batch_mod = {'img': [], 'sketch_boxes': [],
                  'label': [], 'sketch_path': []
